@@ -43,8 +43,15 @@ class MRecv
         @connection.bind(@local_ip, @group_port)
     end
 
-    def show_process_stats(run_time)
+    def handle_exit(run_time)
+        @connection.close
         puts "\nExiting after #{run_time.to_i} seconds and #{@message_count} messages."
+
+        if @message_count == 0
+            exit!
+        end
+
+        exit
     end
 
     def process_timeout(timeout)
@@ -54,19 +61,12 @@ class MRecv
             return true
         end
 
-        @connection.close
-        show_process_stats(run_time)
-
-        if @message_count == 0
-            exit 1
-        end
-
-        exit 0
+        handle_exit(run_time)
     end
 
     def process_loop(timeout)
         loop do
-            if timeout > 0
+            if timeout and timeout > 0
                 process_timeout(timeout)
             end
 
@@ -93,10 +93,8 @@ class MRecv
             process_loop(timeout)
 
         rescue Interrupt
-            @connection.close
             run_time = Time.new - @start_time
-            show_process_stats(run_time)
-            exit 0
+            handle_exit(run_time)
         end
     end
 end
