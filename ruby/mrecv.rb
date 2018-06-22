@@ -40,7 +40,7 @@ class MRecv
     def subscribe_to_feed
         @connection.setsockopt(Socket::IPPROTO_IP, Socket::IP_ADD_MEMBERSHIP, @group)
         @connection.setsockopt(Socket::SOL_SOCKET, Socket::SO_REUSEPORT, 1)
-        @connection.bind(@local_ip, @group_port)
+        @connection.bind(@group_ip, @group_port)
     end
 
     def handle_exit(run_time)
@@ -79,7 +79,7 @@ class MRecv
             else
                 @message_count += 1
                 time_now = Time.new
-                puts "#{time_now} source=#{sender[3]}:#{sender[1]} destination=#{@group_ip}:#{group_port} size=#{message.size}"
+                puts "#{time_now} source=#{sender[3]}:#{sender[1]} destination=#{@group_ip}:#{@group_port} size=#{message.size}"
             end
         end
     end
