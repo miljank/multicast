@@ -1,0 +1,29 @@
+name: mrecv
+version: 0.0.1
+author: Miljan Karadzic <miljank@gmail.com>
+about: Subscribe and listen on a specified multicast feed.
+args:
+- address:
+    long: address
+    value_name: ADDRESS
+    required: true
+    takes_value: true
+    help: Multicast group IP
+- port:
+    long: port
+    value_name: PORT
+    required: true
+    takes_value: true
+    help: Multicast group port
+- interface:
+    long: interface
+    value_name: INTERFACE
+    required: true
+    takes_value: true
+    help: Bind to a specific interface
+- timeout:
+    long: timeout
+    value_name: TIMEOUT
+    required: false
+    takes_value: true
+    help: Exit program after specified number of seconds
