@@ -152,11 +152,12 @@ void process_command_line_arguments(int argc, char** argv)
         exit(1);
     }
 
+    struct in_addr addr;
     if ( inet_aton(local_address, &addr) == 0 ) 
     {
         std::cout << "error: Could not get interface IP address: " 
                   << interface << std::endl;
         exit(1);
     }
-
+    
 }
