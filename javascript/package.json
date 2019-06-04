@@ -1,0 +1,29 @@
+{
+  "name": "multicast",
+  "version": "0.0.1",
+  "description": "Multicast command line utilities",
+  "main": "index.js",
+  "dependencies": {
+    "commander": "^2.20.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/miljank/multicast.git"
+  },
+  "keywords": [
+    "multicast",
+    "udp",
+    "node",
+    "nodejs"
+  ],
+  "author": "Miljan Karadzic <miljank@gmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/miljank/multicast/issues"
+  },
+  "homepage": "https://github.com/miljank/multicast#readme"
+}
