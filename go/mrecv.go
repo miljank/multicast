@@ -11,69 +11,173 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-func getLocalAddress(nic *net.Interface) string {
+// MulticastClient ...
+type MulticastClient struct {
+	Interface      string
+	Address        string
+	Port           int
+	LocalInterface *net.Interface
+	LocalAddress   string
+	Group          *net.UDPAddr
+	Connection     *net.UDPConn
+	Messages       int
+	StartTime      int64
+	Timeout        int
+}
+
+// GetInterfaceName ...
+func (m *MulticastClient) GetInterfaceName() (*net.Interface, error) {
+	localInterface, err := net.InterfaceByName(m.Interface)
+	if err != nil {
+		fmt.Println("error: Could not get IP address for interface " + m.Interface)
+	}
+
+	m.LocalInterface = localInterface
+	return m.LocalInterface, err
+}
+
+// GetLocalAddress ...
+func (m *MulticastClient) GetLocalAddress() bool {
+	nic, err := m.GetInterfaceName()
+	if err != nil {
+		return false
+	}
+
 	addrs, err := nic.Addrs()
 	if err != nil {
-		fmt.Println("error: Could not get local IP address")
-		os.Exit(1)
+		return false
 	}
 
 	for _, addr := range addrs {
 		switch v := addr.(type) {
 		case *net.IPNet:
-			return v.IP.String()
+			if v.IP.To4() != nil {
+				m.LocalAddress = v.IP.String()
+				return true
+			}
 		case *net.IPAddr:
-			return v.IP.String()
+			if v.IP.To4() != nil {
+				m.LocalAddress = v.IP.String()
+				return true
+			}
 		}
 	}
 
-	return "none"
+	return false
 }
 
-func getMulticastGroup(port int, address string) *net.UDPAddr {
-	if (port < 1024) || (port > 65535) {
+//IsValid ...
+func (m *MulticastClient) IsValid() bool {
+	if (m.Port < 1024) || (m.Port > 65535) {
 		fmt.Println("error: Port is out of range")
-		os.Exit(1)
+		return false
 	}
 
-	ip := net.ParseIP(address)
+	ip := net.ParseIP(m.Address)
 	if !ip.IsMulticast() {
 		fmt.Println("error: Address is not a valid multicast address")
-		os.Exit(1)
+		return false
 	}
 
-	return &net.UDPAddr{IP: ip, Port: port}
+	return true
 }
 
-func getInterfaceName(nic string) (*net.Interface, error) {
-	localInterface, err := net.InterfaceByName(nic)
-	return localInterface, err
+// CreateGroup ...
+func (m *MulticastClient) CreateGroup() {
+	ip := net.ParseIP(m.Address)
+	m.Group = &net.UDPAddr{IP: ip, Port: m.Port}
 }
 
-func getConnection(localInterface *net.Interface, multicastGroup *net.UDPAddr) (*net.UDPConn, error) {
-	conn, err := net.ListenMulticastUDP("udp", localInterface, multicastGroup)
-	return conn, err
+// CreateConnection ..
+func (m *MulticastClient) CreateConnection() bool {
+	conn, err := net.ListenMulticastUDP("udp", m.LocalInterface, m.Group)
+	if err != nil {
+		fmt.Println("error: Could not join group " + m.Interface)
+		return false
+	}
+
+	m.Connection = conn
+	return true
 }
 
-func checkTimeout(startTime int64, timeout int) bool {
+// Setup ...
+func (m *MulticastClient) Setup() bool {
+	if !m.IsValid() {
+		return false
+	}
+
+	if !m.GetLocalAddress() {
+		return false
+	}
+
+	m.CreateGroup()
+	if !m.CreateConnection() {
+		return false
+	}
+	return true
+}
+
+// SetTimeout ...
+func (m *MulticastClient) SetTimeout(timeout int) {
+	m.Timeout = timeout
+}
+
+// ShowDetails ...
+func (m *MulticastClient) ShowDetails() {
+	fmt.Println("subscriber="+m.LocalAddress, "destination="+m.Address+":"+strconv.Itoa(m.Port))
+}
+
+// HasTimedOut ...
+func (m *MulticastClient) HasTimedOut() bool {
+	if m.Timeout == 0 {
+		return false
+	}
+
 	currentTime := time.Now().Unix()
-
-	if int(currentTime-startTime) >= timeout {
+	if int(currentTime-m.StartTime) >= m.Timeout {
 		return true
 	}
 
 	return false
 }
 
-func showPackage(rawData int, source string, destination string, port string) {
+// ShowPacket ...
+func (m *MulticastClient) ShowPacket(rawData int, source string, destination string) {
 	t := time.Now()
-
 	timestamp := t.Format("2006-01-02 15:04:05.999999")
 	data := make([]byte, rawData)
-	size := strconv.Itoa(len(data))
 
-	fmt.Println(timestamp + " source=" + source +
-		" destination=" + destination + ":" + port + " size=" + size)
+	fmt.Println(timestamp, "source="+source, "destination="+destination+":"+strconv.Itoa(m.Port),
+		"size="+strconv.Itoa(len(data)))
+}
+
+// Run ...
+func (m *MulticastClient) Run() {
+	packetConnection := ipv4.NewPacketConn(m.Connection)
+	packetConnection.SetControlMessage(ipv4.FlagSrc|ipv4.FlagDst, true)
+	defer packetConnection.Close()
+	defer m.Connection.Close()
+
+	m.StartTime = time.Now().Unix()
+	buffer := make([]byte, 2048)
+
+	m.ShowDetails()
+
+	for {
+		if m.HasTimedOut() {
+			fmt.Println("\nExiting after", m.Timeout, "seconds and", m.Messages, "messages")
+			break
+		}
+
+		rawData, cm, src, err := packetConnection.ReadFrom(buffer)
+		if err != nil {
+			fmt.Println(err)
+			break
+		}
+
+		m.Messages++
+		m.ShowPacket(rawData, src.String(), cm.Dst.String())
+	}
 }
 
 func main() {
@@ -83,48 +187,11 @@ func main() {
 	timeout := flag.Int("timeout", 0, "Exit program after specified number of seconds")
 
 	flag.Parse()
-	multicastGroup := getMulticastGroup(*port, *address)
-
-	localInterface, err := getInterfaceName(*nic)
-	if err != nil {
-		fmt.Println("error: Could not get IP address for interface " + *nic)
+	client := MulticastClient{Interface: *nic, Address: *address, Port: *port}
+	if !client.Setup() {
 		os.Exit(1)
 	}
 
-	conn, err := getConnection(localInterface, multicastGroup)
-	if err != nil {
-		fmt.Println("error: Could not join group " + *nic)
-		os.Exit(1)
-	}
-	defer conn.Close()
-
-	localAddress := getLocalAddress(localInterface)
-	fmt.Println("subscriber=" + localAddress + " destination=" +
-		*address + ":" + strconv.Itoa(*port))
-
-	packetConn := ipv4.NewPacketConn(conn)
-	defer packetConn.Close()
-
-	startTime := time.Now().Unix()
-	messages := 0
-
-	packetConn.SetControlMessage(ipv4.FlagSrc|ipv4.FlagDst, true)
-	buf := make([]byte, 2048)
-
-	for {
-		if *timeout != 0 && checkTimeout(startTime, *timeout) {
-			fmt.Println("\nExiting after " + strconv.Itoa(*timeout) +
-				" seconds and " + strconv.Itoa(messages) + " messages")
-			os.Exit(0)
-		}
-
-		rawData, cm, src, err := packetConn.ReadFrom(buf)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		messages++
-		showPackage(rawData, src.String(), cm.Dst.String(), strconv.Itoa(*port))
-	}
+	client.SetTimeout(*timeout)
+	client.Run()
 }
